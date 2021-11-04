@@ -1,0 +1,248 @@
+from cv2 import cv2
+import mediapipe as mp
+import numpy as np
+import cv2
+
+# for screen capture
+from mss import mss
+from PIL import Image
+
+import mouth
+
+mp_drawing = mp.solutions.drawing_utils
+mp_drawing_styles = mp.solutions.drawing_styles
+mp_face_mesh = mp.solutions.face_mesh.FaceMesh()
+
+green = (0, 255, 0)
+blue = (255, 0, 0)
+red = (0, 0, 255)
+white = (255, 255, 255)
+black = (0, 0, 0)
+firebrick = (139, 0, 0)
+
+"""
+def mouse_move(event, x, y, flags, param):
+    if event == cv2.EVENT_MOUSEMOVE:
+        img = frame.copy()
+        a = mouth.get_mouth_landmarks(faces[0])
+        for a in mouth_landmarks:
+            pdx = int(mouth_landmark.x * width)
+            pdy = int(mouth_landmark.y * height)
+            cv2.circle(frame, (pdx, pdy), 2, dot_color1, -1)
+            if abs(pdx - x) < 5 and abs(pdy - y) < 5:
+                cv2.circle(frame, (pdx, pdy), 2, dot_color1, -1)
+                print(i)
+            cv2.imshow('FaceMesh', img)
+"""
+
+
+def mouth_landmarks(image, face):
+    img = image.copy()
+
+    height = img.shape[0]
+    width = img.shape[1]
+
+    landmarks = mouth.get_mouth_landmarks(face)
+    for point in landmarks:
+        x = int(point.x * width)
+        y = int(point.y * height)
+        cv2.circle(img, (x, y), 1, green, -1)
+
+    return img
+
+
+def mouth_mask(image, face):
+    img = image.copy()
+
+    height = img.shape[0]
+    width = img.shape[1]
+
+    inner_mouth = mouth.get_inner_mouth(face)
+    outer_mouth = mouth.get_outer_mouth(face)
+
+    mask = np.zeros_like(img)
+
+    mask_points = []
+    for point in outer_mouth:
+        x = int(point.x * width)
+        y = int(point.y * height)
+        mask_points.append([x, y])
+    mask = cv2.fillPoly(mask, [np.array(mask_points)], white)
+
+    mask_points = []
+    for point in inner_mouth:
+        x = int(point.x * width)
+        y = int(point.y * height)
+        mask_points.append([x, y])
+    mask = cv2.fillPoly(mask, [np.array(mask_points)], black)
+
+    return mask
+
+
+def mouth_bounds(image, face):
+    img = image.copy()
+
+    height = img.shape[0]
+    width = img.shape[1]
+
+    inner_mouth = mouth.get_inner_mouth(face)
+    outer_mouth = mouth.get_outer_mouth(face)
+
+    line_points = []
+    for point in outer_mouth:
+        x = int(point.x * width)
+        y = int(point.y * height)
+        line_points.append([x, y])
+        cv2.polylines(img, [np.array(line_points)], False, blue, 2)
+    cv2.line(img, line_points[0], line_points[len(line_points) - 1], blue, 2)
+
+    line_points = []
+    for point in inner_mouth:
+        x = int(point.x * width)
+        y = int(point.y * height)
+        line_points.append([x, y])
+        cv2.polylines(img, [np.array(line_points)], False, red, 2)
+    cv2.line(img, line_points[0], line_points[len(line_points) - 1], red, 2)
+
+    return img
+
+
+def mouth_color(image, face, color):
+    img = image.copy()
+
+    mask = mouth_mask(img, face)
+
+    colored_mouth = np.zeros_like(mask)
+    colored_mouth[:] = color[:3]
+    colored_mouth = cv2.bitwise_and(mask, colored_mouth)
+    colored_mouth = cv2.GaussianBlur(colored_mouth, (5, 5), cv2.BORDER_DEFAULT)
+    colored_mouth = cv2.addWeighted(img, 1, colored_mouth, color[3] / 256, 0)
+
+    return colored_mouth
+
+
+def mouth_pattern(image, face, pattern_path):
+    img = image.copy()
+
+    mask = mouth_mask(img, face)
+    pattern = cv2.imread(pattern_path)
+
+    pattern = cv2.resize(pattern, (mask.shape[1], mask.shape[0]))
+    pattern_mouth = cv2.bitwise_and(pattern, mask)
+    pattern_mouth = cv2.GaussianBlur(pattern_mouth, (3, 3), cv2.BORDER_DEFAULT)
+    pattern_mouth = cv2.addWeighted(img, 1, pattern_mouth, 0.6, 0)
+
+    return pattern_mouth
+
+
+def concat_tile(im_list_2d):
+    return cv2.vconcat([cv2.hconcat(im_list_h) for im_list_h in im_list_2d])
+
+
+def nothing(x):
+    pass
+
+
+def create_trackbar():
+    cv2.namedWindow('MouthColor')
+    cv2.resizeWindow('MouthColor', 500, 200)
+
+    cv2.createTrackbar('R', 'MouthColor', 0, 255, nothing)
+    cv2.createTrackbar('G', 'MouthColor', 0, 255, nothing)
+    cv2.createTrackbar('B', 'MouthColor', 0, 255, nothing)
+    cv2.createTrackbar('A', 'MouthColor', 0, 255, nothing)
+
+
+def get_color_from_trackbar():
+    r = cv2.getTrackbarPos('R', 'MouthColor')
+    g = cv2.getTrackbarPos('G', 'MouthColor')
+    b = cv2.getTrackbarPos('B', 'MouthColor')
+    a = cv2.getTrackbarPos('A', 'MouthColor')
+
+    return [b, g, r, a]
+
+
+def screen_input():
+    process = False
+    with mss() as sct:
+        while True:
+            screen_shot = sct.grab(sct.monitors[2])
+            frame = Image.frombytes('RGB', (screen_shot.width, screen_shot.height), screen_shot.rgb)
+            frame = cv2.cvtColor(np.array(frame), cv2.COLOR_BGR2RGB)
+            frame = cv2.resize(frame, (854, 360))
+            frame = frame[0:0 + 360, 100:100 + 640]
+
+            image = frame
+
+            if process:
+                faces = mp_face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)).multi_face_landmarks
+                face = faces[0]
+
+                color = get_color_from_trackbar()
+
+                landmarks = mouth_landmarks(frame, face)
+                bounds = mouth_bounds(frame, face)
+                mask = mouth_mask(frame, face)
+                pattern_mouth = mouth_pattern(frame, face, 'patterns/pattern03.jpg')
+                colored_mouth = mouth_color(frame, face, color)
+
+                image = concat_tile([[frame, landmarks, bounds], [mask, pattern_mouth, colored_mouth]])
+
+            cv2.imshow('MouthDetect', image)
+
+            if cv2.waitKey(33) & 0xFF in (ord('q'), 27):
+                break
+
+            if cv2.waitKey(33) & 0xFF in (ord('s'), 27):
+                process = not process
+                if process:
+                    create_trackbar()
+                else:
+                    cv2.destroyWindow('MouthColor')
+
+    cv2.destroyAllWindows()
+
+
+def webcam_input():
+    process = False
+    cap = cv2.VideoCapture(0)
+    while cap.isOpened():
+        success, frame = cap.read()
+        image = frame
+
+        if process:
+            faces = mp_face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)).multi_face_landmarks
+            face = faces[0]
+
+            color = get_color_from_trackbar()
+
+            landmarks = mouth_landmarks(frame, face)
+            bounds = mouth_bounds(frame, face)
+            mask = mouth_mask(frame, face)
+            pattern_mouth = mouth_pattern(frame, face, 'patterns/pattern03.jpg')
+            colored_mouth = mouth_color(frame, face, color)
+
+            image = concat_tile([[frame, landmarks, bounds], [mask, pattern_mouth, colored_mouth]])
+
+        cv2.imshow('MouthDetect', image)
+
+        if cv2.waitKey(33) & 0xFF in (ord('q'), 27):
+            break
+
+        if cv2.waitKey(33) & 0xFF in (ord('s'), 27):
+            process = not process
+            if process:
+                create_trackbar()
+            else:
+                cv2.destroyWindow('MouthColor')
+
+    cv2.destroyAllWindows()
+
+
+def main():
+    # screen_input()
+    webcam_input()
+
+
+if __name__ == "__main__":
+    main()
