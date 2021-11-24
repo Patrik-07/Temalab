@@ -11,7 +11,7 @@ import mouth
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
-mp_face_mesh = mp.solutions.face_mesh.FaceMesh()
+mp_face_mesh = mp.solutions.face_mesh.FaceMesh(refine_landmarks=True)
 
 green = (0, 255, 0)
 blue = (255, 0, 0)
@@ -49,6 +49,33 @@ def mouth_landmarks(image, face):
         cv2.circle(img, (x, y), 1, green, -1)
 
     return img
+
+def iris_mask(image, face):
+    img = image.copy()
+
+    height = img.shape[0]
+    width = img.shape[1]
+
+    left_iris = iris.get_left_iris_landmarks(face)
+    right_iris = iris.get_right_iris_landmarks(face)
+
+    mask = np.zeros_like(img)
+
+    mask_points = []
+    for point in left_iris:
+        x = int(point.x * width)
+        y = int(point.y * height)
+        mask_points.append([x, y])
+    mask = cv2.fillPoly(mask, [np.array(mask_points)], white)
+
+    mask_points = []
+    for point in right_iris:
+        x = int(point.x * width)
+        y = int(point.y * height)
+        mask_points.append([x, y])
+    mask = cv2.fillPoly(mask, [np.array(mask_points)], white)
+
+    return mask
 
 
 def mouth_mask(image, face):
@@ -107,6 +134,20 @@ def mouth_bounds(image, face):
     return img
 
 
+def iris_color(image, face, color):
+    img = image.copy()
+
+    mask = iris_mask(img, face)
+
+    colored_iris = np.zeros_like(mask)
+    colored_iris[:] = color[:3]
+    colored_iris = cv2.bitwise_and(mask, colored_iris)
+    colored_iris = cv2.GaussianBlur(colored_iris, (5, 5), cv2.BORDER_DEFAULT)
+    colored_iris = cv2.addWeighted(img, 1, colored_iris, color[3] / 256, 0)
+
+    return colored_iris
+
+
 def mouth_color(image, face, color):
     img = image.copy()
 
@@ -143,21 +184,34 @@ def nothing(x):
     pass
 
 
-def create_trackbar():
-    cv2.namedWindow('MouthColor')
-    cv2.resizeWindow('MouthColor', 500, 200)
+def create_trackbars():
+    cv2.namedWindow('Color')
+    cv2.resizeWindow('Color', 500, 400)
 
-    cv2.createTrackbar('R', 'MouthColor', 0, 255, nothing)
-    cv2.createTrackbar('G', 'MouthColor', 0, 255, nothing)
-    cv2.createTrackbar('B', 'MouthColor', 0, 255, nothing)
-    cv2.createTrackbar('A', 'MouthColor', 0, 255, nothing)
+    cv2.createTrackbar('Mouth R', 'Color', 0, 255, nothing)
+    cv2.createTrackbar('Mouth G', 'Color', 0, 255, nothing)
+    cv2.createTrackbar('Mouth B', 'Color', 0, 255, nothing)
+    cv2.createTrackbar('Mouth A', 'Color', 0, 255, nothing)
+
+    cv2.createTrackbar('Iris R', 'Color', 0, 255, nothing)
+    cv2.createTrackbar('Iris G', 'Color', 0, 255, nothing)
+    cv2.createTrackbar('Iris B', 'Color', 0, 255, nothing)
+    cv2.createTrackbar('Iris A', 'Color', 0, 255, nothing)
 
 
-def get_color_from_trackbar():
-    r = cv2.getTrackbarPos('R', 'MouthColor')
-    g = cv2.getTrackbarPos('G', 'MouthColor')
-    b = cv2.getTrackbarPos('B', 'MouthColor')
-    a = cv2.getTrackbarPos('A', 'MouthColor')
+def get_mouth_color_from_trackbar():
+    r = cv2.getTrackbarPos('Mouth R', 'Color')
+    g = cv2.getTrackbarPos('Mouth G', 'Color')
+    b = cv2.getTrackbarPos('Mouth B', 'Color')
+    a = cv2.getTrackbarPos('Mouth A', 'Color')
+
+    return [b, g, r, a]
+
+def get_iris_color_from_trackbar():
+    r = cv2.getTrackbarPos('Iris R', 'Color')
+    g = cv2.getTrackbarPos('Iris G', 'Color')
+    b = cv2.getTrackbarPos('Iris B', 'Color')
+    a = cv2.getTrackbarPos('Iris A', 'Color')
 
     return [b, g, r, a]
 
@@ -177,6 +231,8 @@ def screen_input():
             if process:
                 faces = mp_face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)).multi_face_landmarks
                 face = faces[0]
+
+                # irises = mp_face_mesh.FACEMASH_IRISES
 
                 color = get_color_from_trackbar()
 
@@ -214,12 +270,13 @@ def webcam_input():
             faces = mp_face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)).multi_face_landmarks
             face = faces[0]
 
-            color = get_color_from_trackbar()
+            color = get_mouth_color_from_trackbar()
+            color_iris = get_iris_color_from_trackbar()
 
             landmarks = mouth_landmarks(frame, face)
             bounds = mouth_bounds(frame, face)
             mask = mouth_mask(frame, face)
-            pattern_mouth = mouth_pattern(frame, face, 'patterns/pattern03.jpg')
+            pattern_mouth = mouth_pattern(frame, face, 'patterns/zucc.png')
             colored_mouth = mouth_color(frame, face, color)
 
             image = concat_tile([[frame, landmarks, bounds], [mask, pattern_mouth, colored_mouth]])
@@ -232,7 +289,7 @@ def webcam_input():
         if cv2.waitKey(33) & 0xFF in (ord('s'), 27):
             process = not process
             if process:
-                create_trackbar()
+                create_trackbars()
             else:
                 cv2.destroyWindow('MouthColor')
 

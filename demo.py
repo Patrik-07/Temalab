@@ -1,7 +1,7 @@
 import cv2
 import mediapipe as mp
 
-image = cv2.imread("person.jpg")
+image = cv2.imread("patterns/person.jpg")
 
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh()
