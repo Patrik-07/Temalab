@@ -8,6 +8,7 @@ from mss import mss
 from PIL import Image
 
 import mouth
+import iris
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -49,6 +50,7 @@ def mouth_landmarks(image, face):
         cv2.circle(img, (x, y), 1, green, -1)
 
     return img
+
 
 def iris_mask(image, face):
     img = image.copy()
@@ -104,6 +106,8 @@ def mouth_mask(image, face):
     mask = cv2.fillPoly(mask, [np.array(mask_points)], black)
 
     return mask
+
+
 
 
 def mouth_bounds(image, face):
@@ -234,7 +238,7 @@ def screen_input():
 
                 # irises = mp_face_mesh.FACEMASH_IRISES
 
-                color = get_color_from_trackbar()
+                color = get_mouth_color_from_trackbar()
 
                 landmarks = mouth_landmarks(frame, face)
                 bounds = mouth_bounds(frame, face)
@@ -252,7 +256,7 @@ def screen_input():
             if cv2.waitKey(33) & 0xFF in (ord('s'), 27):
                 process = not process
                 if process:
-                    create_trackbar()
+                    create_trackbars()
                 else:
                     cv2.destroyWindow('MouthColor')
 
@@ -278,8 +282,9 @@ def webcam_input():
             mask = mouth_mask(frame, face)
             pattern_mouth = mouth_pattern(frame, face, 'patterns/zucc.png')
             colored_mouth = mouth_color(frame, face, color)
+            colored_iris = iris_color(frame, face, color_iris)
 
-            image = concat_tile([[frame, landmarks, bounds], [mask, pattern_mouth, colored_mouth]])
+            image = concat_tile([[frame, landmarks, bounds, colored_iris], [mask, pattern_mouth, colored_mouth, colored_iris]])
 
         cv2.imshow('MouthDetect', image)
 
