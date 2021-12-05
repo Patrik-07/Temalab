@@ -1,7 +1,7 @@
 import math
 
 from direct.task.TaskManagerGlobal import taskMgr
-from panda3d.core import Texture, CardMaker, WindowProperties
+from panda3d.core import Texture, CardMaker, WindowProperties, DirectionalLight
 from direct.showbase.ShowBase import ShowBase
 from cv2 import cv2
 # import mediapipe as mp
@@ -55,7 +55,7 @@ class Window(ShowBase):
         self.y_offset = 0.5 + 0.05
 
         self.model = self.loader.loadModel('sphere.obj')
-        t = self.loader.loadTexture('MustacheUV-textureMap.bmp')
+        t = self.loader.loadTexture('red.png')
         self.model.setP(self.model, 90)
         self.model.setTexture(t, 1)
         self.model.setScale(0.1, 0.1, 0.1)
@@ -64,6 +64,12 @@ class Window(ShowBase):
         self.model.setDepthTest(False)
         self.model.setDepthWrite(False)
         self.model.reparentTo(self.render)
+
+        dl = DirectionalLight('dl')
+        dl.setColor((1, 1, 1, 1))
+        dlnp = self.render.attachNewNode(dl)
+        dlnp.setHpr(0, -20, 0)
+        self.render.setLight(dlnp)
 
         taskMgr.add(self.update_tex, 'video frame update')
 
