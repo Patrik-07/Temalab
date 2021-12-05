@@ -2,6 +2,7 @@ from cv2 import cv2
 import mediapipe as mp
 import numpy as np
 import cv2
+from enum import Enum
 
 # for screen capture
 from mss import mss
@@ -10,8 +11,8 @@ from PIL import Image
 import mouth
 import iris
 
-mp_drawing = mp.solutions.drawing_utils
-mp_drawing_styles = mp.solutions.drawing_styles
+# mp_drawing = mp.solutions.drawing_utils
+# mp_drawing_styles = mp.solutions.drawing_styles
 mp_face_mesh = mp.solutions.face_mesh.FaceMesh(refine_landmarks=True)
 
 green = (0, 255, 0)
@@ -20,6 +21,11 @@ red = (0, 0, 255)
 white = (255, 255, 255)
 black = (0, 0, 0)
 firebrick = (139, 0, 0)
+
+class Process(Enum):
+    NOTHING = 1
+    MOUTH = 2
+    GLASSES = 3
 
 """
 def mouse_move(event, x, y, flags, param):
@@ -36,8 +42,16 @@ def mouse_move(event, x, y, flags, param):
             cv2.imshow('FaceMesh', img)
 """
 
-
 def mouth_landmarks(image, face):
+    """
+    Args:
+        image: np.ndarray in the tuple returned by cv2.VideoCapture.read()
+        face: contains facial landmark data, that can be accessed though the landmark property,
+            which is a list of landmarks
+
+    Returns:
+        An ndarray of the image with the mouth landmarks drawn as green circles
+    """
     img = image.copy()
 
     height = img.shape[0]
@@ -53,6 +67,16 @@ def mouth_landmarks(image, face):
 
 
 def iris_mask(image, face):
+    """
+    Args:
+        image: np.ndarray in the tuple returned by cv2.VideoCapture.read()
+        face: contains facial landmark data, that can be accessed though the landmark property,
+            which is a list of landmarks
+
+    Returns:
+        An ndarray representing the iris mask image (black everywhere except the iris, which is
+        a white polygon)
+    """
     img = image.copy()
 
     height = img.shape[0]
@@ -81,6 +105,16 @@ def iris_mask(image, face):
 
 
 def mouth_mask(image, face):
+    """
+    Args:
+        image: np.ndarray in the tuple returned by cv2.VideoCapture.read()
+        face: contains facial landmark data, that can be accessed though the landmark property,
+            which is a list of landmarks
+    
+    Returns:
+        An ndarray representing the mouth mask image (black everywhere except the lips, where 
+        it is white)
+    """
     img = image.copy()
 
     height = img.shape[0]
@@ -108,9 +142,17 @@ def mouth_mask(image, face):
     return mask
 
 
-
-
 def mouth_bounds(image, face):
+    """
+    Args:
+        image: np.ndarray in the tuple returned by cv2.VideoCapture.read()
+        face: contains facial landmark data, that can be accessed though the landmark property,
+            which is a list of landmarks
+
+    Returns:
+        An ndarray representing the mouth bounds image (the input image with a blue contour
+        around the outside of the mouth and a red contour around the inside)
+    """
     img = image.copy()
 
     height = img.shape[0]
@@ -139,6 +181,18 @@ def mouth_bounds(image, face):
 
 
 def iris_color(image, face, color):
+    """
+    Args:
+        image: np.ndarray in the tuple returned by cv2.VideoCapture.read()
+        face: contains facial landmark data, that can be accessed though the landmark property,
+            which is a list of landmarks
+        color: list of integers between 0 and 255, representing rgba data: 
+            [0,0,0,0] <=> rgba(0,0,0,0)
+
+    Returns:
+        An ndarray representing the iris color image (the input image with colored polygons on 
+        the irises)
+    """
     img = image.copy()
 
     mask = iris_mask(img, face)
@@ -146,13 +200,24 @@ def iris_color(image, face, color):
     colored_iris = np.zeros_like(mask)
     colored_iris[:] = color[:3]
     colored_iris = cv2.bitwise_and(mask, colored_iris)
-    colored_iris = cv2.GaussianBlur(colored_iris, (5, 5), cv2.BORDER_DEFAULT)
+    colored_iris = cv2.GaussianBlur(colored_iris, (15, 15), cv2.BORDER_DEFAULT)
     colored_iris = cv2.addWeighted(img, 1, colored_iris, color[3] / 256, 0)
 
     return colored_iris
 
 
 def mouth_color(image, face, color):
+    """
+    Args:
+        image: np.ndarray in the tuple returned by cv2.VideoCapture.read()
+        face: contains facial landmark data, that can be accessed though the landmark property,
+            which is a list of landmarks
+        color: list of integers between 0 and 255, representing rgba data: 
+            [0,0,0,0] <=> rgba(0,0,0,0)
+
+    Returns:
+        An ndarray representing the mouth color image (the input image with the mouth colored)
+    """
     img = image.copy()
 
     mask = mouth_mask(img, face)
@@ -262,17 +327,18 @@ def screen_input():
 
     cv2.destroyAllWindows()
 
-
 def webcam_input():
-    process = False
+    process = Process.NOTHING
     cap = cv2.VideoCapture(0)
     while cap.isOpened():
         success, frame = cap.read()
         image = frame
 
-        if process:
+        if process == Process.MOUTH:
             faces = mp_face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)).multi_face_landmarks
-            face = faces[0]
+
+            if faces:
+                face = faces[0]
 
             color = get_mouth_color_from_trackbar()
             color_iris = get_iris_color_from_trackbar()
@@ -280,11 +346,18 @@ def webcam_input():
             landmarks = mouth_landmarks(frame, face)
             bounds = mouth_bounds(frame, face)
             mask = mouth_mask(frame, face)
-            pattern_mouth = mouth_pattern(frame, face, 'patterns/zucc.png')
+            pattern_mouth = mouth_pattern(frame, face, 'patterns/pattern01.jpg')
             colored_mouth = mouth_color(frame, face, color)
             colored_iris = iris_color(frame, face, color_iris)
+            mask_iris = iris_mask(frame, face)
 
-            image = concat_tile([[frame, landmarks, bounds, colored_iris], [mask, pattern_mouth, colored_mouth, colored_iris]])
+            image = concat_tile([
+                        [frame, landmarks, mask, mask_iris],
+                        [bounds, pattern_mouth, colored_mouth, colored_iris]
+                    ])
+        
+        if process == Process.GLASSES:
+            pass
 
         cv2.imshow('MouthDetect', image)
 
@@ -292,11 +365,14 @@ def webcam_input():
             break
 
         if cv2.waitKey(33) & 0xFF in (ord('s'), 27):
-            process = not process
+            process = Process.MOUTH
             if process:
                 create_trackbars()
             else:
                 cv2.destroyWindow('MouthColor')
+
+        if cv2.waitKey(33) & 0xFF in (ord('o'), 27):
+            process = Process.GLASSES
 
     cv2.destroyAllWindows()
 
@@ -304,7 +380,6 @@ def webcam_input():
 def main():
     # screen_input()
     webcam_input()
-
 
 if __name__ == "__main__":
     main()

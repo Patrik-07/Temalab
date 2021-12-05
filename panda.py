@@ -4,12 +4,12 @@ from direct.task.TaskManagerGlobal import taskMgr
 from panda3d.core import Texture, CardMaker, WindowProperties
 from direct.showbase.ShowBase import ShowBase
 from cv2 import cv2
-import mediapipe as mp
+# import mediapipe as mp
+from mediapipe.python.solutions.face_mesh import FaceMesh
 
-from facemesh import mouth_landmarks
+from nose import get_dist_between_nose_tip_landmarks
 
-mp_face_mesh = mp.solutions.face_mesh.FaceMesh()
-
+mp_face_mesh = FaceMesh(refine_landmarks = True)
 
 class Vec2:
     def __init__(self, a, b):
@@ -21,7 +21,7 @@ class Window(ShowBase):
     def __init__(self, cap):
         super().__init__()
 
-        self.moustache = 164
+        self.nose = 4
 
         self.r1 = 6
         self.r2 = 168
@@ -30,8 +30,8 @@ class Window(ShowBase):
 
         self.process = False
         self.cap = cap
-        success, frame = self.cap.read()
-        self.h, self.w, depth = frame.shape
+        _, frame = self.cap.read()
+        self.h, self.w, _ = frame.shape
         scale = 1
 
         self.iter = 0
@@ -54,11 +54,11 @@ class Window(ShowBase):
         self.x_offset = (self.w / self.h) / 2
         self.y_offset = 0.5 + 0.05
 
-        self.model = self.loader.loadModel('Mustache.obj')
+        self.model = self.loader.loadModel('sphere.obj')
         t = self.loader.loadTexture('MustacheUV-textureMap.bmp')
         self.model.setP(self.model, 90)
         self.model.setTexture(t, 1)
-        self.model.setScale(0.15, 0.15, 0.15)
+        self.model.setScale(0.1, 0.1, 0.1)
         self.model.setPos(0, 3.5, 0.25)
         self.model.setBin("fixed", 0)
         self.model.setDepthTest(False)
@@ -87,15 +87,12 @@ class Window(ShowBase):
         if success:
             if self.process:
                 faces = mp_face_mesh.process(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)).multi_face_landmarks
-                face = faces[0]
+                if faces:
+                    face = faces[0]
                 landmarks = frame.copy()
-                # print(face.landmark[self.moustache].z)
-                # self.model.setX(face.landmark[self.moustache].x * 5 - 5)
-                # self.model.setZ(-face.landmark[self.moustache].y * 5 + 5)
-                # print(self.model.getY())
 
-                fx = face.landmark[self.moustache].x
-                fy = face.landmark[self.moustache].y
+                fx = face.landmark[self.nose].x
+                fy = face.landmark[self.nose].y
 
                 d = fx - 0.5
                 if d != 0:
@@ -112,6 +109,13 @@ class Window(ShowBase):
                 self.model.setX(px)
                 self.model.setZ(py)
 
+                nose_scale = get_dist_between_nose_tip_landmarks(frame, face)
+                self.model.setScale(
+                    nose_scale / frame.shape[0],
+                    nose_scale / frame.shape[0],
+                    nose_scale / frame.shape[0]
+                )
+
                 for i in range(0, 468):
                     x = int(face.landmark[i].x * self.w)
                     y = int(face.landmark[i].y * self.h)
@@ -121,6 +125,7 @@ class Window(ShowBase):
                     x = int(face.landmark[p].x * self.w)
                     y = int(face.landmark[p].y * self.h)
                     cv2.circle(landmarks, (x, y), 2, (0, 0, 255), -1)
+
                 x = int(face.landmark[168].x * self.w)
                 y = int(face.landmark[168].y * self.h)
                 cv2.circle(landmarks, (x, y), 2, (0, 0, 255), -1)
@@ -128,12 +133,13 @@ class Window(ShowBase):
                 y = int(face.landmark[self.iter].y * self.h)
                 cv2.circle(landmarks, (x, y), 2, (255, 0, 0), -1)
                 frame = cv2.addWeighted(frame, 0.5, landmarks, 0.5, 0)
+                
+
             img = cv2.flip(frame, 0)
             self.texture.setRamImageAs(img.tobytes(), "BGR")
             self.card.setTexture(self.texture)
 
         return task.cont
-
 
 cap = cv2.VideoCapture(0)
 window = Window(cap)
