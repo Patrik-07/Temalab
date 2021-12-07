@@ -1,49 +1,23 @@
 import cv2
-import mediapipe as mp
+from mediapipe.python.solutions import face_mesh as mp_face_mesh
 
-mp_drawing = mp.solutions.drawing_utils
-mp_holistic = mp.solutions.holistic
+image = cv2.imread("patterns/person.jpg")
 
-# Get realtime webcam feed
+face_mesh = mp_face_mesh.FaceMesh(refine_landmarks=True)
 
-# 0 -> webcam
-cap = cv2.VideoCapture(0)
-while cap.isOpened():
-    ret, frame = cap.read()
-    cv2.imshow('Raw Webcam Feed', frame)
+rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-    # waitKey(0) will display the window infinitely until any keypress
-    #
-    # waitKey(10) will display a frame for 10 ms, after which display will
-    # be automatically closed. Since the OS has a minimum time between
-    # switching threads, the function will not wait exactly 10 ms, it will
-    # wait at least 10 ms, depending on what else is running on your computer
-    # at that time.
-    # 
-    # waitKey returns the code of the key pressed. If you have numlock activated,
-    # the returned code might be different, but the last byte is the same whether
-    # or not it is activated.
-    # 
-    # e.g:
-    # key = cv2.waitKey(10)
-    # print(key)
-    # 
-    # pressing c, this will output 1048675 when NumLock is activated
-    # 99 otherwise. (1048675 = 100000000000001100011, 99 = 1100011: the last
-    # byte is identical.
-    #
-    # when we write
-    # 
-    # key = cv2.waitKey(33) & 0b11111111
-    # 
-    # key will be the last byte of the key returned by cv2.waitKey
-    # we can then compare this to ord('q'), and if they are equal, we can close
-    # the video capture
-    if cv2.waitKey(10) & 0xFF == ord('q'):
-        break
+# Facial landmarks
+result = face_mesh.process(rgb_image)
 
-# releases the webcam resource
-cap.release()
+height, width, _ = image.shape
 
-# closes the window
-cv2.destroyAllWindows()
+for facial_landmarks in result.multi_face_landmarks:
+    for i in range(0, mp_face_mesh.FACEMESH_NUM_LANDMARKS_WITH_IRISES):
+        pt1 = facial_landmarks.landmark[i]
+        x = int(pt1.x * width)
+        y = int(pt1.y * height)
+        cv2.circle(image, (x, y), 2, (0, 0, 255), -1)
+
+cv2.imshow("Image", image)
+cv2.waitKey(0)
