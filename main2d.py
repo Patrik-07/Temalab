@@ -2,7 +2,6 @@ from cv2 import cv2
 import mediapipe as mp
 import numpy as np
 import cv2
-from enum import Enum
 
 # for screen capture
 from mss import mss
