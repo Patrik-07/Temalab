@@ -1,6 +1,8 @@
 import cv2
 from mediapipe.python.solutions import face_mesh as mp_face_mesh
 
+LANDMARKS_N = mp_face_mesh.FACEMESH_NUM_LANDMARKS_WITH_IRISES
+
 image = cv2.imread("patterns/person.jpg")
 
 face_mesh = mp_face_mesh.FaceMesh(refine_landmarks=True)
@@ -13,7 +15,7 @@ result = face_mesh.process(rgb_image)
 height, width, _ = image.shape
 
 for facial_landmarks in result.multi_face_landmarks:
-    for i in range(0, mp_face_mesh.FACEMESH_NUM_LANDMARKS_WITH_IRISES):
+    for i in range(0, LANDMARKS_N):
         pt1 = facial_landmarks.landmark[i]
         x = int(pt1.x * width)
         y = int(pt1.y * height)
